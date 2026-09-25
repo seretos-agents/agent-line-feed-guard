@@ -1,8 +1,9 @@
 name: lint
 
+# Runs on every pull request only -- not on push. A push-triggered run on
+# the same branch as an open PR would duplicate the PR run (both fire for
+# the same commit), so PRs are the sole trigger.
 on:
-  push:
-    branches: ["**"]
   pull_request:
 
 permissions:

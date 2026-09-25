@@ -55,8 +55,8 @@ Never anything else. `.bat`, `.cmd` and `.reg` are excluded (CRLF is legitimate 
 ## Install
 
 ```
-/plugin marketplace add Seretos/agent-marketplace
-/plugin install agent-line-feed-guard@agent-marketplace
+/plugin marketplace add seretos-agents/modular-software-factory
+/plugin install agent-line-feed-guard@modular-software-factory
 ```
 
 ## On-demand scan

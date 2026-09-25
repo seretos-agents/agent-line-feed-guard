@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "description": "Repairs CRLF line endings in the files Claude Code parses, so a subagent, skill, or command never silently fails to load.",
   "author": { "name": "Arne von Appen" },
-  "repository": "https://github.com/Seretos/agent-line-feed-guard",
+  "repository": "https://github.com/seretos-agents/agent-line-feed-guard",
   "skills": "./skills",
   "interface": {
     "displayName": "Agent Line Feed Guard",
