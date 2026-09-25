@@ -4,8 +4,8 @@ Hook-only plugin — no binary, no MCP server. `hooks/hooks.json` wires three ev
 
 ## Contracts an agent won't infer from the tree
 
-- **Release is orphan-branch + marketplace dispatch.** `release.yml` (manual: Actions → release → `version=X.Y.Z`) stamps the version into both manifests, force-pushes an orphan `release` branch holding only install-ready files, tags `agent-line-feed-guard--vX.Y.Z`, and POSTs a dispatch (`category: hook`) to `Seretos/agent-marketplace`. `main` and `release` share no history.
-- **Required secret:** `MARKETPLACE_DISPATCH_TOKEN` — fine-grained PAT, `Contents: RW` + `Pull requests: RW` on `Seretos/agent-marketplace` only.
+- **Release is orphan-branch + marketplace dispatch.** `release.yml` (manual: Actions → release → `version=X.Y.Z`) stamps the version into both manifests, force-pushes an orphan `release` branch holding only install-ready files, tags `agent-line-feed-guard--vX.Y.Z`, and POSTs a dispatch (`category: hook`) to BOTH `seretos-agents/modular-software-factory-staging` (lands straight to main, no review) and `seretos-agents/modular-software-factory` (opens a review PR). `main` and `release` share no history.
+- **Required secret:** `MARKETPLACE_DISPATCH_TOKEN` — fine-grained PAT, `Contents: RW` + `Pull requests: RW` on both `seretos-agents/modular-software-factory` and `seretos-agents/modular-software-factory-staging`.
 - **`assets/icon.png` and `description.md` are release artifacts, not just repo files.** The dispatch payload sends `raw.githubusercontent.com/${repo}/${TAG}/…` URLs for both, so they must live on the orphan `release` branch at the tagged commit — that is why `release.yml`'s stage step copies them. Replace the placeholder icon and fill in `description.md`'s Key Features before cutting v0.0.1.
 
 ## Why the design looks like this
