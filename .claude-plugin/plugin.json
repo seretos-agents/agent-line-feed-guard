@@ -1,0 +1,9 @@
+{
+  "name": "agent-line-feed-guard",
+  "description": "Repairs CRLF line endings in the files Claude Code parses, so a subagent, skill, or command never silently fails to load.",
+  "version": "0.0.3",
+  "author": {
+    "name": "Arne von Appen"
+  },
+  "dependencies": []
+}

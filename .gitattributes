@@ -1,0 +1,14 @@
+# This plugin exists because CRLF in the files Claude Code parses makes them
+# silently invisible. Shipping its own sources with CRLF would be the joke that
+# writes itself — so line endings are pinned here rather than left to
+# core.autocrlf. `* text=auto` alone is NOT enough: without eol=lf, checkout on a
+# machine with core.autocrlf=true writes CRLF into the working tree, which is
+# exactly the byte sequence this plugin repairs.
+* text=auto eol=lf
+
+*.mjs  text eol=lf
+*.json text eol=lf
+*.md   text eol=lf
+*.yml  text eol=lf
+
+assets/*.png binary
