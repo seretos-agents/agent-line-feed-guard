@@ -5,3 +5,5 @@
 Thumbs.db
 *.log
 .process-ticket-result.json
+
+.adev/
