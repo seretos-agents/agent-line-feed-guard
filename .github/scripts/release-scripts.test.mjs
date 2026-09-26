@@ -245,6 +245,26 @@ test("prev-release-tag: 1.10.0 sorts above 1.9.0 (no lexical trap)", () => {
   assertEqual(res.stdout, "a--v1.10.0\n", "stdout");
 });
 
+// Per test-critic finding tautology::F4: no prior fixture contains a
+// same-plugin tag whose SemVer precedence is ABOVE the new version being
+// created, so "highest tag strictly below <new-version>" (the plan's exact
+// wording) could not be told apart from "highest tag other than the new one".
+// This can happen for real with out-of-order manual releases or a hotfix cut
+// on an old version line after a newer one already shipped. The plan's own
+// Approach text ("the highest ... tag whose precedence is strictly below
+// <new-version>") settles this directly: a higher-precedence tag must never
+// be treated as "the previous release" relative to a lower new version.
+test("prev-release-tag: a higher-precedence tag above the new version is not 'previous'", () => {
+  const stdin = ["a--v0.9.0", "a--v2.0.0", "a--v1.0.0"].join("\n") + "\n"; // v1.0.0 is the tag being created
+  const res = runScript("prev-release-tag.sh", ["a", "1.0.0"], { input: stdin });
+  assertEqual(res.status, 0, "exit code");
+  assertEqual(
+    res.stdout,
+    "a--v0.9.0\n",
+    "must resolve to the highest tag strictly below the new version (v0.9.0), not the higher-precedence v2.0.0"
+  );
+});
+
 test("prev-release-tag: an invalid new version exits 2 with ::error::", () => {
   for (const bad of ["1.0", "01.0.0", "1.0.0-"]) {
     const res = runScript("prev-release-tag.sh", ["a", bad], { input: "" });
@@ -259,6 +279,15 @@ test("prev-release-tag: an invalid new version exits 2 with ::error::", () => {
 
 console.log("\nrelease-preflight.sh");
 
+// pre-flight cannot know the previous release run's historical head_sha — that
+// SHA lives only in the Actions run for <PREV_TAG> and is read by a human, per
+// the plan's post-merge bootstrap note ("create src/<PREV_TAG> ... from the
+// head_sha of that tag's release run"). This test therefore asserts the
+// instructional/placeholder wording the plan specifies verbatim, with the
+// real <PREV_TAG> name substituted, and explicitly rejects an implementation
+// that substitutes the *current* repo's HEAD in place of that placeholder
+// (see test-critic finding tautology::F1) — that would silently tell a human
+// to bootstrap the marker at the wrong (new-release) commit.
 test("preflight: missing src/<PREV> prints the exact bootstrap commands", () => {
   const repo = initGitRepo();
   const res = runPreflight(["owner/repo", "agent-line-feed-guard", "0.0.2"], {
@@ -269,8 +298,17 @@ test("preflight: missing src/<PREV> prints the exact bootstrap commands", () => 
   assertEqual(res.status, 1, "exit code");
   const out = res.stdout + res.stderr;
   assert(
-    out.includes(`git tag src/agent-line-feed-guard--v0.0.1 ${repo.sha}`),
-    "bootstrap 'git tag src/...' command with the real head_sha"
+    out.includes("read head_sha from the Actions run of `agent-line-feed-guard--v0.0.1`") ||
+      out.includes("read head_sha from the Actions run of agent-line-feed-guard--v0.0.1"),
+    "instructs a human to read head_sha from the PREV_TAG's own Actions run"
+  );
+  assert(
+    out.includes("git tag src/agent-line-feed-guard--v0.0.1 <head_sha>"),
+    "bootstrap 'git tag src/...' command uses the <head_sha> placeholder, not a real SHA"
+  );
+  assert(
+    !out.includes(`git tag src/agent-line-feed-guard--v0.0.1 ${repo.sha}`),
+    "must NOT substitute the current repo's HEAD for the historical head_sha placeholder"
   );
   assert(
     out.includes("git push origin src/agent-line-feed-guard--v0.0.1"),
@@ -292,25 +330,55 @@ test("preflight: an existing src/<TAG> blocks and names it", () => {
   );
 });
 
+// src/PREV must be present here so check 5 (missing src/<PREV_TAG>) cannot be
+// the thing that forces exit 1 — otherwise this test would pass regardless of
+// whether the <TAG>-exists check (check 3) does anything at all (see
+// test-critic finding tautology::F2). With src/PREV satisfied and <TAG>
+// itself present, only check 3 can be the cause, and the message must name
+// the offending <TAG> to prove it, not just any exit 1.
 test("preflight: an existing <TAG> blocks", () => {
   const repo = initGitRepo();
   const res = runPreflight(["owner/repo", "agent-line-feed-guard", "0.0.2"], {
     tags: ["agent-line-feed-guard--v0.0.1"],
     cwd: repo.dir,
-    ghRefs: ["agent-line-feed-guard--v0.0.2"],
+    ghRefs: ["src/agent-line-feed-guard--v0.0.1", "agent-line-feed-guard--v0.0.2"],
   });
   assertEqual(res.status, 1, "exit code");
+  assert(
+    (res.stdout + res.stderr).includes("agent-line-feed-guard--v0.0.2"),
+    "names the existing <TAG> that caused the block"
+  );
 });
 
+// src/PREV must be present and <TAG> absent here so that checks 3-5 are all
+// satisfied and cannot be what forces exit 1 — otherwise this test would pass
+// regardless of whether the default-branch check (check 1) does anything at
+// all (see test-critic finding tautology::F3; runPreflight's ghRefs default
+// of [] previously left src/PREV missing, so check 5 alone explained the
+// exit 1). With every other check satisfied, only the branch check can cause
+// the failure, and the message must be about the branch, not a generic
+// exit 1 — the plan does not fix exact wording for this message, so this
+// asserts on the branch value/keyword actually being present rather than a
+// literal string.
 test("preflight: GITHUB_REF off the default branch is rejected", () => {
   const repo = initGitRepo();
   const res = runPreflight(["owner/repo", "agent-line-feed-guard", "0.0.2"], {
     tags: ["agent-line-feed-guard--v0.0.1"],
     cwd: repo.dir,
+    ghRefs: ["src/agent-line-feed-guard--v0.0.1"], // PREV's marker already bootstrapped; <TAG> absent
     githubRef: "refs/heads/feature-x",
     defaultBranch: "main",
   });
   assertEqual(res.status, 1, "exit code");
+  const out = res.stdout + res.stderr;
+  assert(
+    out.includes("refs/heads/feature-x") || /branch/i.test(out),
+    "error message is specific to the branch check (names the actual ref or says 'branch'), not a generic exit 1"
+  );
+  assert(
+    !out.includes("agent-line-feed-guard--v0.0.2"),
+    "must not be the <TAG>/src-<TAG> checks firing instead (they are satisfied by this fixture)"
+  );
 });
 
 test("preflight: first release (no tags) succeeds with an empty prev_tag", () => {
