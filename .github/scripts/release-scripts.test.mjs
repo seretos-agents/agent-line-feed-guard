@@ -202,20 +202,30 @@ function parseKV(output) {
 
 console.log("\nprev-release-tag.sh");
 
-test("prev-release-tag: rc.10 beats rc.2, excludes new/src/foreign", () => {
+// Per test-critic finding tautology::F1 (round 2): every exclusion fixture
+// below previously sat AT OR ABOVE the new version (0.1.0), so the
+// "strictly below <new-version>" threshold rule alone removed them — the
+// src/, foreign-plugin and malformed-semver filters were never actually
+// exercised. Fixed by giving each excluded tag a precedence BELOW the new
+// version but ABOVE the true answer (a--v0.9.0-rc.10): an implementation
+// missing any one of those three filters would then surface that tag's
+// version as a *different*, wrong "previous" tag instead of failing to
+// change the result, so the exact-stdout assertion below only passes when
+// all three filters are genuinely applied.
+test("prev-release-tag: rc.10 beats rc.2, excludes new/src/foreign/malformed", () => {
   const stdin =
     [
-      "a--v0.1.0-rc.2",
-      "a--v0.1.0-rc.10",
-      "a--v0.0.9",
-      "a--v0.1.0", // the tag being created — must be excluded
-      "src/a--v0.1.0-rc.10", // src/* marker — must be excluded
-      "b--v9.9.9", // foreign plugin — must be excluded
-      "a--v1.x", // malformed — must be excluded
+      "a--v0.9.0-rc.2",
+      "a--v0.9.0-rc.10",
+      "a--v0.5.0",
+      "a--v1.0.0", // the tag being created — must be excluded
+      "src/a--v0.9.5", // src/* marker, precedence ABOVE the true answer but below the new version — must be excluded
+      "b--v0.9.7", // foreign plugin, precedence ABOVE the src/ tag but below the new version — must be excluded
+      "a--v0.9.8-rc.01", // malformed (leading-zero numeric prerelease id), precedence ABOVE the foreign tag but below the new version — must be excluded
     ].join("\n") + "\n";
-  const res = runScript("prev-release-tag.sh", ["a", "0.1.0"], { input: stdin });
+  const res = runScript("prev-release-tag.sh", ["a", "1.0.0"], { input: stdin });
   assertEqual(res.status, 0, "exit code");
-  assertEqual(res.stdout, "a--v0.1.0-rc.10\n", "stdout");
+  assertEqual(res.stdout, "a--v0.9.0-rc.10\n", "stdout");
 });
 
 test("prev-release-tag: first release (empty stdin) prints nothing, exit 0", () => {
@@ -224,9 +234,15 @@ test("prev-release-tag: first release (empty stdin) prints nothing, exit 0", () 
   assertEqual(res.stdout, "", "stdout");
 });
 
+// Per test-critic finding tautology::F1 (round 2): both fixture tags
+// previously sat above the new version (0.1.0), so they were removed by the
+// threshold rule regardless of whether the src/ and foreign-plugin filters
+// existed. Fixed by putting both below the new version (1.0.0): a missing
+// filter would then surface one of them as a non-empty (wrong) answer,
+// instead of "nothing" being the only reachable output either way.
 test("prev-release-tag: first release (only foreign/src tags) prints nothing, exit 0", () => {
-  const stdin = ["src/a--v0.1.0", "b--v9.9.9"].join("\n") + "\n";
-  const res = runScript("prev-release-tag.sh", ["a", "0.1.0"], { input: stdin });
+  const stdin = ["src/a--v0.5.0", "b--v0.7.0"].join("\n") + "\n";
+  const res = runScript("prev-release-tag.sh", ["a", "1.0.0"], { input: stdin });
   assertEqual(res.status, 0, "exit code");
   assertEqual(res.stdout, "", "stdout");
 });
@@ -316,12 +332,18 @@ test("preflight: missing src/<PREV> prints the exact bootstrap commands", () => 
   );
 });
 
+// Per test-critic finding tautology::F2 (round 2): src/PREV was previously
+// left missing here, so check 5 (missing src/<PREV_TAG>) alone produced the
+// exit 1 regardless of whether check 4 (src/<TAG> exists) did anything.
+// Fixed by also bootstrapping src/PREV in ghRefs, isolating check 4 as the
+// only remaining check that can cause the failure — matching how the
+// sibling "<TAG> exists" test below was already fixed.
 test("preflight: an existing src/<TAG> blocks and names it", () => {
   const repo = initGitRepo();
   const res = runPreflight(["owner/repo", "agent-line-feed-guard", "0.0.2"], {
     tags: ["agent-line-feed-guard--v0.0.1"],
     cwd: repo.dir,
-    ghRefs: ["src/agent-line-feed-guard--v0.0.2"],
+    ghRefs: ["src/agent-line-feed-guard--v0.0.1", "src/agent-line-feed-guard--v0.0.2"],
   });
   assertEqual(res.status, 1, "exit code");
   assert(

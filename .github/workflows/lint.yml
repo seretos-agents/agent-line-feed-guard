@@ -40,6 +40,13 @@ jobs:
           node --check scripts/line-feed-guard-hook.mjs
           node --check scripts/line-feed-guard-hook.test.mjs
 
+      - name: Check release script syntax
+        run: |
+          node --check .github/scripts/release-scripts.test.mjs
+          bash -n .github/scripts/prev-release-tag.sh
+          bash -n .github/scripts/release-preflight.sh
+          bash -n .github/scripts/marketplace-payload.sh
+
       - name: Validate every SKILL.md has YAML frontmatter
         run: |
           python3 - <<'EOF'
@@ -70,3 +77,6 @@ jobs:
 
       - name: Run hook tests
         run: node scripts/line-feed-guard-hook.test.mjs
+
+      - name: Run release script tests
+        run: node .github/scripts/release-scripts.test.mjs
